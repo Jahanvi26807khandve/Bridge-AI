@@ -1,7 +1,20 @@
+import { GoogleGenAI } from '@google/genai'
+import { config as loadEnv } from 'dotenv'
 import express from 'express'
+import { fileURLToPath } from 'node:url'
+
+import { SYSTEM_PROMPT } from './prompt.js'
+
+loadEnv({
+  path: [
+    fileURLToPath(new URL('../.env', import.meta.url)),
+    fileURLToPath(new URL('./.env', import.meta.url)),
+  ],
+})
 
 const app = express()
 const port = Number(process.env.PORT ?? 3000)
+const defaultModel = 'gemini-3.8-flash'
 
 app.use(express.json())
 
@@ -13,7 +26,20 @@ app.get('/api/health', (_request, response) => {
   response.status(200).json({ status: 'ok' })
 })
 
-app.post('/api/simplify', (request, response) => {
+function isSimplifyResult(value) {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.keys(value).length === 4 &&
+    typeof value.summary === 'string' &&
+    typeof value.whoItAffects === 'string' &&
+    typeof value.deadlines === 'string' &&
+    Array.isArray(value.actionSteps) &&
+    value.actionSteps.every((step) => typeof step === 'string')
+  )
+}
+
+app.post('/api/simplify', async (request, response) => {
   const { text } = request.body ?? {}
 
   if (typeof text !== 'string' || text.trim().length === 0) {
@@ -24,12 +50,57 @@ app.post('/api/simplify', (request, response) => {
     return response.status(400).json({ error: 'Text must not exceed 5000 characters.' })
   }
 
-  return response.status(200).json({
-    summary: 'This document explains an important update and what you need to do.',
-    whoItAffects: 'People or organizations named in the document.',
-    deadlines: 'Check the document for any dates that apply to you.',
-    actionSteps: ['Review the document', 'Confirm whether it applies to you', 'Act before any stated deadline'],
-  })
+  if (!process.env.GEMINI_API_KEY) {
+    return response.status(502).json({ error: 'Gemini API key is not configured.' })
+  }
+
+  let generatedText
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
+    const result = await ai.models.generateContent({
+      model: process.env.GEMINI_MODEL || defaultModel,
+      contents: `Return JSON only with these fields: summary, whoItAffects, deadlines, and actionSteps. Do not include markdown. Simplify this text:\n\n${text}`,
+      config: {
+        systemInstruction: SYSTEM_PROMPT,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'OBJECT',
+          properties: {
+            summary: { type: 'STRING' },
+            whoItAffects: { type: 'STRING' },
+            deadlines: { type: 'STRING' },
+            actionSteps: { type: 'ARRAY', items: { type: 'STRING' } },
+          },
+          required: ['summary', 'whoItAffects', 'deadlines', 'actionSteps'],
+        },
+      },
+    })
+    generatedText = result.text
+  } catch (error) {
+    const apiError = error && typeof error === 'object' ? error : {}
+    const message = typeof apiError.message === 'string'
+      ? apiError.message.replaceAll(process.env.GEMINI_API_KEY, '[REDACTED]')
+      : apiError.message
+    console.error('Gemini API request failed:', {
+      name: apiError.name,
+      message,
+      ...(apiError.status !== undefined ? { status: apiError.status } : {}),
+    })
+    return response.status(502).json({ error: 'Gemini API request failed.' })
+  }
+
+  let simplified
+  try {
+    simplified = JSON.parse(generatedText)
+  } catch {
+    return response.status(502).json({ error: 'Gemini returned an invalid JSON response.' })
+  }
+
+  if (!isSimplifyResult(simplified)) {
+    return response.status(502).json({ error: 'Gemini returned an invalid JSON response.' })
+  }
+
+  return response.status(200).json(simplified)
 })
 
 app.listen(port, '127.0.0.1', () => {
