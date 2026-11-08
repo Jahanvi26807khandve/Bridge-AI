@@ -6,8 +6,10 @@ function App() {
   const [notice, setNotice] = useState('')
   const [feedback, setFeedback] = useState('')
   const [hasError, setHasError] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [result, setResult] = useState(null)
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
 
     if (!notice.trim()) {
@@ -22,14 +24,50 @@ function App() {
       return
     }
 
-    setFeedback('The text is within the limit. It has not been sent or analyzed.')
+    setIsLoading(true)
+    setResult(null)
+    setFeedback('')
     setHasError(false)
+
+    try {
+      const response = await fetch('/api/simplify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: notice }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`)
+      }
+
+      const data = await response.json()
+
+      if (
+        typeof data.summary !== 'string' ||
+        typeof data.whoItAffects !== 'string' ||
+        typeof data.deadlines !== 'string' ||
+        !Array.isArray(data.actionSteps) ||
+        !data.actionSteps.every((step) => typeof step === 'string')
+      ) {
+        throw new Error('The response did not contain a valid explanation')
+      }
+
+      setResult(data)
+    } catch {
+      setFeedback("We couldn't simplify this notice right now. Please try again.")
+      setHasError(true)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   function handleNoticeChange(event) {
     setNotice(event.target.value)
     setFeedback('')
     setHasError(false)
+    setResult(null)
   }
 
   return (
@@ -46,8 +84,8 @@ function App() {
           <p className="eyebrow">Public notice explainer</p>
           <h1 id="page-title">Make a public notice easier to understand.</h1>
           <p className="intro-copy">
-            Start with the text of a notice you have received. This first version
-            only checks that your text is ready for a future explanation.
+            Paste the text of a notice you have received to get a plain-language
+            explanation.
           </p>
         </section>
 
@@ -67,6 +105,7 @@ function App() {
               onChange={handleNoticeChange}
               aria-describedby="notice-help notice-count"
               aria-invalid={hasError}
+              disabled={isLoading}
               placeholder="Paste the notice here..."
               rows={9}
             />
@@ -79,25 +118,55 @@ function App() {
               </p>
             </div>
 
-            <button className="submit-button" type="submit">
-              Check input
+            <button className="submit-button" type="submit" disabled={isLoading}>
+              {isLoading ? 'Simplifying...' : 'Simplify notice'}
             </button>
             <p
               className={`feedback${hasError ? ' feedback-error' : ''}`}
               role="status"
               aria-live="polite"
             >
-              {feedback}
+              {isLoading ? 'Simplifying your notice...' : feedback}
             </p>
           </form>
         </section>
 
+        {result && (
+          <section className="input-panel mt-6" aria-labelledby="results-heading">
+            <h2 id="results-heading">Your simplified notice</h2>
+            <div className="mt-5 space-y-5">
+              <section>
+                <h3 className="mb-2 font-semibold">Summary</h3>
+                <p className="mb-0 leading-relaxed">{result.summary}</p>
+              </section>
+              <section className="border-t border-[var(--color-border)] pt-5">
+                <h3 className="mb-2 font-semibold">Who it affects</h3>
+                <p className="mb-0 leading-relaxed">{result.whoItAffects}</p>
+              </section>
+              <section className="border-t border-[var(--color-border)] pt-5">
+                <h3 className="mb-2 font-semibold">Deadlines</h3>
+                <p className="mb-0 leading-relaxed">{result.deadlines}</p>
+              </section>
+              <section className="border-t border-[var(--color-border)] pt-5">
+                <h3 className="mb-2 font-semibold">What you should do</h3>
+                <ul className="mb-0 list-disc space-y-2 pl-5">
+                  {result.actionSteps.map((step, index) => (
+                    <li key={`${index}-${step}`}>{step}</li>
+                  ))}
+                </ul>
+              </section>
+            </div>
+            <aside className="privacy-note" aria-label="Legal advice disclaimer">
+              <p>This is a simplified explanation, not legal advice.</p>
+            </aside>
+          </section>
+        )}
+
         <aside className="privacy-note" aria-label="Privacy and prototype limits">
           <h2>What happens to your text?</h2>
           <p>
-            This screen checks the text in your browser only. It does not send
-            your notice to a server or AI service, and it does not save it.
-            Explanations are not available yet.
+            Your notice is sent to our simplification service to generate an
+            explanation. Do not include personal or sensitive information.
           </p>
         </aside>
       </main>
