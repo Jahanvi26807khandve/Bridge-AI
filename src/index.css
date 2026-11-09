@@ -60,6 +60,37 @@ a {
   background: var(--color-obsidian);
 }
 
+.primary-navigation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-link {
+  border-radius: 4px;
+  padding: 9px 12px;
+  color: rgb(241 233 218 / 78%);
+  font-size: 0.94rem;
+  font-weight: 580;
+  text-decoration: none;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  color: var(--color-ivory);
+  background: rgb(255 255 255 / 10%);
+}
+
+.nav-link:focus-visible,
+.menu-toggle:focus-visible {
+  outline: 3px solid var(--color-ivory);
+  outline-offset: 3px;
+}
+
+.menu-toggle {
+  display: none;
+}
+
 .wordmark {
   color: var(--color-ivory);
   font-size: 1.25rem;
@@ -74,20 +105,57 @@ a {
   outline-offset: 4px;
 }
 
-.prototype-label {
-  border: 1px solid rgb(241 233 218 / 42%);
-  border-radius: 4px;
-  padding: 4px 9px;
-  color: var(--color-ivory);
-  background: rgb(255 255 255 / 8%);
-  font-size: 0.78rem;
-  font-weight: 650;
-  letter-spacing: 0.025em;
-}
-
 .main-content {
   max-width: 760px;
   padding: 64px 24px 56px;
+}
+
+.info-page .intro {
+  margin-bottom: 32px;
+}
+
+.steps-list {
+  display: grid;
+  gap: 22px;
+  margin: 22px 0 0;
+  padding-left: 24px;
+}
+
+.steps-list li {
+  padding-left: 4px;
+}
+
+.steps-list h3 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+
+.steps-list p,
+.contact-panel p {
+  margin-bottom: 0;
+  color: var(--color-muted);
+  line-height: 1.6;
+}
+
+.contact-panel {
+  display: grid;
+  gap: 22px;
+}
+
+.contact-panel strong,
+.contact-panel a {
+  display: block;
+}
+
+.contact-panel strong {
+  margin-bottom: 5px;
+  color: var(--color-ink);
+}
+
+.contact-panel a {
+  width: fit-content;
+  color: var(--color-terracotta-hover);
+  text-underline-offset: 3px;
 }
 
 .intro {
@@ -258,8 +326,44 @@ textarea[aria-invalid="true"] {
 
 @media (max-width: 600px) {
   .topbar {
+    position: relative;
+    flex-wrap: wrap;
     min-height: 64px;
     padding-inline: 16px;
+  }
+
+  .menu-toggle {
+    display: grid;
+    gap: 5px;
+    border: 0;
+    padding: 10px 4px 10px 10px;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .menu-toggle span {
+    display: block;
+    width: 22px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--color-ivory);
+  }
+
+  .primary-navigation {
+    display: none;
+    flex-basis: 100%;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 0 12px;
+  }
+
+  .primary-navigation.is-open {
+    display: flex;
+  }
+
+  .nav-link {
+    padding: 11px 8px;
   }
 
   .main-content {
