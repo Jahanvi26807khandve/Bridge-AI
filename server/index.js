@@ -15,6 +15,9 @@ loadEnv({
 const app = express()
 const port = Number(process.env.PORT ?? 3000)
 const defaultModel = 'gemini-3.8-flash'
+const geminiTimeoutMs = 30_000
+const geminiRetryDelayMs = 2_000
+const busyErrorMessage = 'The service is busy. Please try again in a minute.'
 
 app.use(express.json())
 
@@ -39,6 +42,18 @@ function isSimplifyResult(value) {
   )
 }
 
+function logGeminiError(error) {
+  const apiError = error && typeof error === 'object' ? error : {}
+  const message = typeof apiError.message === 'string'
+    ? apiError.message.replaceAll(process.env.GEMINI_API_KEY, '[REDACTED]')
+    : apiError.message
+  console.error('Gemini API request failed:', {
+    ...(apiError.status !== undefined ? { status: apiError.status } : {}),
+    message,
+  })
+  return apiError.status
+}
+
 app.post('/api/simplify', async (request, response) => {
   const { text } = request.body ?? {}
 
@@ -56,11 +71,15 @@ app.post('/api/simplify', async (request, response) => {
 
   let generatedText
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
-    const result = await ai.models.generateContent({
+    const ai = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      httpOptions: { timeout: geminiTimeoutMs },
+    })
+    const generateContent = () => ai.models.generateContent({
       model: process.env.GEMINI_MODEL || defaultModel,
       contents: `Return JSON only with these fields: summary, whoItAffects, deadlines, and actionSteps. Do not include markdown. Simplify this text:\n\n${text}`,
       config: {
+        temperature: 0.2,
         systemInstruction: SYSTEM_PROMPT,
         responseMimeType: 'application/json',
         responseSchema: {
@@ -75,17 +94,26 @@ app.post('/api/simplify', async (request, response) => {
         },
       },
     })
+    let result
+    try {
+      result = await generateContent()
+    } catch (error) {
+      const status = logGeminiError(error)
+      if (status !== 429 && status !== 503) {
+        return response.status(502).json({ error: 'Gemini API request failed.' })
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, geminiRetryDelayMs))
+      try {
+        result = await generateContent()
+      } catch (retryError) {
+        logGeminiError(retryError)
+        return response.status(503).json({ error: busyErrorMessage })
+      }
+    }
     generatedText = result.text
   } catch (error) {
-    const apiError = error && typeof error === 'object' ? error : {}
-    const message = typeof apiError.message === 'string'
-      ? apiError.message.replaceAll(process.env.GEMINI_API_KEY, '[REDACTED]')
-      : apiError.message
-    console.error('Gemini API request failed:', {
-      name: apiError.name,
-      message,
-      ...(apiError.status !== undefined ? { status: apiError.status } : {}),
-    })
+    logGeminiError(error)
     return response.status(502).json({ error: 'Gemini API request failed.' })
   }
 
