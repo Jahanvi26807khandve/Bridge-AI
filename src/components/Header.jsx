@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 
 const links = [
   { label: 'Home', to: '/' },
-  { label: 'About', to: '/about' },
+  { label: 'About us', to: '/about' },
   { label: 'Contact', to: '/contact' },
 ]
 
@@ -47,6 +47,15 @@ function Header() {
             {label}
           </NavLink>
         ))}
+        <NavLink
+          className={({ isActive }) =>
+            `nav-link sign-in-link${isActive ? ' active' : ''}`
+          }
+          to="/signin"
+          onClick={closeMenu}
+        >
+          Sign in
+        </NavLink>
       </nav>
     </header>
   )

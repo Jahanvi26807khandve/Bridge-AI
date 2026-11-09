@@ -1,21 +1,30 @@
-import { Route, Routes } from 'react-router-dom'
+import { Route, Routes, useLocation } from 'react-router-dom'
 import Header from './components/Header.jsx'
 import About from './pages/About.jsx'
 import Contact from './pages/Contact.jsx'
+import ForgotPassword from './pages/ForgotPassword.jsx'
 import Home from './pages/Home.jsx'
+import SignIn from './pages/SignIn.jsx'
 
 function App() {
+  const { pathname } = useLocation()
+  const isAuthPage = pathname === '/signin' || pathname === '/forgot-password'
+
   return (
-    <div className="page-shell min-h-screen">
-      <Header />
+    <div className={`page-shell min-h-screen${isAuthPage ? ' auth-shell' : ''}`}>
+      {!isAuthPage && <Header />}
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
+        <Route path="/signin" element={<SignIn />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
       </Routes>
-      <footer className="site-footer">
-        BridgeAI is a prototype. It does not provide verified guidance.
-      </footer>
+      {!isAuthPage && (
+        <footer className="site-footer">
+          BridgeAI is a prototype. It does not provide verified guidance.
+        </footer>
+      )}
     </div>
   )
 }
