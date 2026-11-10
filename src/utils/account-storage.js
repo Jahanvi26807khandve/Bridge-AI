@@ -100,6 +100,7 @@ export function createHistoryEntry(result) {
     date: now.toLocaleDateString(),
     time: now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
     title: result.summary.slice(0, 60),
+    language: result.language,
     summary: result.summary,
     whoItAffects: result.whoItAffects,
     deadlines: result.deadlines,

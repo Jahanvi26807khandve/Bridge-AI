@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { getResultLanguageCode, getResultText } from '../i18n.js'
 
 const STORAGE_KEY = 'bridgeai-last-result'
 
@@ -15,9 +16,30 @@ function isValidResult(value) {
 }
 
 const speechLanguages = {
-  english: { locale: 'en-IN', name: 'English' },
-  hindi: { locale: 'hi-IN', name: 'Hindi' },
-  marathi: { locale: 'mr-IN', name: 'Marathi' },
+  english: { locale: 'en-IN', prefix: 'en' },
+  hindi: { locale: 'hi-IN', prefix: 'hi' },
+  marathi: { locale: 'mr-IN', prefix: 'mr' },
+}
+
+function findSpeechVoice(voices, language) {
+  const exactLocales =
+    language.prefix === 'en' ? ['en-IN', 'en-US', 'en-GB'] : [language.locale]
+  const exactVoices = voices.filter(
+    (voice) =>
+      typeof voice.lang === 'string' &&
+      exactLocales.includes(voice.lang.toLowerCase()),
+  )
+
+  return (
+    exactVoices.find(
+      (voice) => typeof voice.name === 'string' && voice.name.includes('Google'),
+    ) ??
+    exactVoices[0] ??
+    voices.find((voice) =>
+      typeof voice.lang === 'string' &&
+      voice.lang.toLowerCase().startsWith(language.prefix),
+    )
+  )
 }
 
 function getSavedResult() {
@@ -34,7 +56,6 @@ function getSavedResult() {
 
 const cards = [
   {
-    title: 'Summary',
     key: 'summary',
     icon: (
       <>
@@ -44,7 +65,6 @@ const cards = [
     ),
   },
   {
-    title: 'Who it affects',
     key: 'whoItAffects',
     icon: (
       <>
@@ -54,7 +74,6 @@ const cards = [
     ),
   },
   {
-    title: 'Deadlines',
     key: 'deadlines',
     icon: (
       <>
@@ -64,7 +83,6 @@ const cards = [
     ),
   },
   {
-    title: 'What you should do',
     key: 'actionSteps',
     icon: (
       <>
@@ -80,7 +98,9 @@ function Result() {
   const navigate = useNavigate()
   const stateResult = location.state?.result
   const result = isValidResult(stateResult) ? stateResult : getSavedResult()
-  const speechUtterance = useRef(null)
+  const speechSession = useRef(null)
+  const voiceWaitCleanup = useRef(null)
+  const speechPauseTimeout = useRef(null)
   const copyTimeout = useRef(null)
   const [feedback, setFeedback] = useState(
     location.state?.storageWarning
@@ -94,7 +114,10 @@ function Result() {
   useEffect(
     () => () => {
       window.clearTimeout(copyTimeout.current)
-      speechUtterance.current = null
+      speechSession.current = null
+      voiceWaitCleanup.current?.()
+      voiceWaitCleanup.current = null
+      window.clearTimeout(speechPauseTimeout.current)
       window.speechSynthesis?.cancel()
     },
     [],
@@ -105,10 +128,14 @@ function Result() {
   }
 
   const plainText = [
-    `Summary\n${result.summary}`,
-    `Who it affects\n${result.whoItAffects}`,
-    `Deadlines\n${result.deadlines}`,
-    `What you should do\n${result.actionSteps.map((step, index) => `${index + 1}. ${step}`).join('\n')}`,
+    `${getResultText(result.language, 'summary')}\n${result.summary}`,
+    `${getResultText(result.language, 'whoItAffects')}\n${result.whoItAffects}`,
+    `${getResultText(result.language, 'deadlines')}\n${result.deadlines}`,
+    `${getResultText(result.language, 'actionSteps')}\n${
+      result.actionSteps.length
+        ? result.actionSteps.map((step, index) => `${index + 1}. ${step}`).join('\n')
+        : getResultText(result.language, 'noActions')
+    }`,
   ].join('\n\n')
 
   async function handleCopy() {
@@ -124,7 +151,10 @@ function Result() {
 
   function handleReadAloud() {
     if (isSpeaking) {
-      speechUtterance.current = null
+      speechSession.current = null
+      voiceWaitCleanup.current?.()
+      voiceWaitCleanup.current = null
+      window.clearTimeout(speechPauseTimeout.current)
       window.speechSynthesis.cancel()
       setIsSpeaking(false)
       return
@@ -135,33 +165,84 @@ function Result() {
       return
     }
 
-    const language = speechLanguages[result.language] ?? speechLanguages.english
-    const voice = window.speechSynthesis
-      .getVoices()
-      .find((availableVoice) => availableVoice.lang.toLowerCase() === language.locale.toLowerCase())
-    if (!voice) {
-      setFeedback(`No ${language.name} voice is available on this device.`)
-      return
-    }
-
-    const utterance = new window.SpeechSynthesisUtterance(plainText)
-    utterance.lang = language.locale
-    utterance.voice = voice
-    speechUtterance.current = utterance
-    utterance.onend = () => {
-      if (speechUtterance.current !== utterance) return
-      speechUtterance.current = null
-      setIsSpeaking(false)
-    }
-    utterance.onerror = () => {
-      if (speechUtterance.current !== utterance) return
-      speechUtterance.current = null
-      setIsSpeaking(false)
-      setFeedback('Read aloud could not start. Please try again.')
-    }
-    window.speechSynthesis.speak(utterance)
+    const languageKey =
+      typeof result.language === 'string' ? result.language.toLowerCase() : 'english'
+    const language = speechLanguages[languageKey] ?? speechLanguages.english
+    const synthesis = window.speechSynthesis
+    const session = {}
+    const sentences = [
+      `${getResultText(result.language, 'summary')}. ${result.summary}`,
+      `${getResultText(result.language, 'whoItAffects')}. ${result.whoItAffects}`,
+      `${getResultText(result.language, 'deadlines')}. ${result.deadlines}`,
+      `${getResultText(result.language, 'actionSteps')}.`,
+      ...(result.actionSteps.length
+        ? result.actionSteps.map((step, index) => `${index + 1}. ${step}`)
+        : [getResultText(result.language, 'noActions')]),
+    ]
+    speechSession.current = session
     setIsSpeaking(true)
     setFeedback('')
+
+    function finishVoiceWait() {
+      voiceWaitCleanup.current?.()
+      voiceWaitCleanup.current = null
+    }
+
+    function speakSentences(voice, index = 0) {
+      if (speechSession.current !== session) return
+      if (index >= sentences.length) {
+        speechSession.current = null
+        setIsSpeaking(false)
+        return
+      }
+
+      const utterance = new window.SpeechSynthesisUtterance(sentences[index])
+      utterance.lang = language.locale
+      utterance.voice = voice
+      utterance.onend = () => {
+        if (speechSession.current !== session) return
+        speechPauseTimeout.current = window.setTimeout(
+          () => speakSentences(voice, index + 1),
+          250,
+        )
+      }
+      utterance.onerror = () => {
+        if (speechSession.current !== session) return
+        speechSession.current = null
+        setIsSpeaking(false)
+        setFeedback('Read aloud could not start. Please try again.')
+      }
+      synthesis.speak(utterance)
+    }
+
+    function chooseVoice() {
+      if (speechSession.current !== session) return
+      const voice = findSpeechVoice(synthesis.getVoices(), language)
+      if (voice) {
+        finishVoiceWait()
+        speakSentences(voice)
+      }
+    }
+
+    const voicesChanged = () => chooseVoice()
+    synthesis.addEventListener('voiceschanged', voicesChanged)
+    const waitTimeout = window.setTimeout(() => {
+      if (speechSession.current !== session) return
+      const voice = findSpeechVoice(synthesis.getVoices(), language)
+      finishVoiceWait()
+      if (voice) {
+        speakSentences(voice)
+      } else {
+        speechSession.current = null
+        setIsSpeaking(false)
+        setFeedback(getResultText(result.language, 'noVoice'))
+      }
+    }, 5000)
+    voiceWaitCleanup.current = () => {
+      synthesis.removeEventListener('voiceschanged', voicesChanged)
+      window.clearTimeout(waitTimeout)
+    }
+    chooseVoice()
   }
 
   function handleSimplifyAnother() {
@@ -170,20 +251,26 @@ function Result() {
     } catch {
       setFeedback('Could not clear the saved result in this browser.')
     }
-    speechUtterance.current = null
+    speechSession.current = null
+    voiceWaitCleanup.current?.()
+    voiceWaitCleanup.current = null
+    window.clearTimeout(speechPauseTimeout.current)
     window.speechSynthesis?.cancel()
     navigate('/', { replace: true })
   }
 
   return (
-    <main className="main-content result-content mx-auto w-full">
+    <main
+      className="main-content result-content mx-auto w-full"
+      lang={getResultLanguageCode(result.language)}
+    >
       <section className="intro" aria-labelledby="result-title">
         <p className="eyebrow">Your plain-language explanation</p>
         <h1 id="result-title">Your simplified notice</h1>
       </section>
 
       <div className="result-grid">
-        {cards.map(({ title, key, icon }, index) => (
+        {cards.map(({ key, icon }, index) => (
           <section
             className="result-card"
             style={{ '--card-index': index }}
@@ -196,7 +283,7 @@ function Result() {
                   {icon}
                 </svg>
               </span>
-              <h2 id={`result-${key}-title`}>{title}</h2>
+              <h2 id={`result-${key}-title`}>{getResultText(result.language, key)}</h2>
             </div>
             {key === 'actionSteps' ? (
               result.actionSteps.length ? (
@@ -206,7 +293,7 @@ function Result() {
                   ))}
                 </ol>
               ) : (
-                <p className="result-card-copy">No action steps were provided.</p>
+                <p className="result-card-copy">{getResultText(result.language, 'noActions')}</p>
               )
             ) : (
               <p className="result-card-copy">{result[key]}</p>
@@ -215,16 +302,14 @@ function Result() {
         ))}
       </div>
 
-      <p className="result-disclaimer">
-        This is a simplified explanation, not legal advice.
-      </p>
+      <p className="result-disclaimer">{getResultText(result.language, 'disclaimer')}</p>
 
       <div className="result-actions" aria-label="Result actions">
         <button className="result-button" type="button" onClick={handleCopy}>
-          Copy summary
+          {getResultText(result.language, 'copySummary')}
         </button>
         <button className="result-button result-button-secondary" type="button" onClick={() => window.print()}>
-          Print
+          {getResultText(result.language, 'print')}
         </button>
         <button
           className="result-button result-button-secondary"
@@ -232,14 +317,14 @@ function Result() {
           onClick={handleReadAloud}
           aria-pressed={isSpeaking}
         >
-          {isSpeaking ? 'Stop' : 'Read aloud'}
+          {isSpeaking ? 'Stop' : getResultText(result.language, 'readAloud')}
         </button>
         <button
           className="result-button result-button-secondary"
           type="button"
           onClick={handleSimplifyAnother}
         >
-          Simplify another notice
+          {getResultText(result.language, 'simplifyAnotherNotice')}
         </button>
       </div>
       <p className="result-feedback" role="status" aria-live="polite">
