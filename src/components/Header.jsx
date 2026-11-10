@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
+import { useAuth } from '../context/auth-context.js'
 
 const links = [
   { label: 'Home', to: '/' },
@@ -9,9 +10,20 @@ const links = [
 
 function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [signOutError, setSignOutError] = useState('')
+  const { user, loading, signOut } = useAuth()
 
   function closeMenu() {
     setIsMenuOpen(false)
+  }
+
+  async function handleSignOut() {
+    setSignOutError('')
+    try {
+      await signOut()
+    } catch {
+      setSignOutError('We couldn’t sign you out. Please try again.')
+    }
   }
 
   return (
@@ -47,15 +59,49 @@ function Header() {
             {label}
           </NavLink>
         ))}
-        <NavLink
-          className={({ isActive }) =>
-            `nav-link sign-in-link${isActive ? ' active' : ''}`
-          }
-          to="/signin"
-          onClick={closeMenu}
-        >
-          Sign in
-        </NavLink>
+        {loading ? (
+          <span className="auth-status" role="status">
+            Checking sign-in…
+          </span>
+        ) : user ? (
+          <div className="account-controls">
+            <NavLink
+              className="account-link"
+              to="/account"
+              aria-label={`Account for ${user.displayName || user.email || 'signed-in user'}`}
+              onClick={closeMenu}
+            >
+              {user.photoURL && (
+                <img className="account-avatar" src={user.photoURL} alt="" />
+              )}
+              <span className="account-name">
+                {user.displayName || user.email || 'Signed in'}
+              </span>
+            </NavLink>
+            <button
+              className="sign-out-button"
+              type="button"
+              onClick={handleSignOut}
+            >
+              Sign out
+            </button>
+            {signOutError && (
+              <span className="auth-header-feedback" role="status">
+                {signOutError}
+              </span>
+            )}
+          </div>
+        ) : (
+          <NavLink
+            className={({ isActive }) =>
+              `nav-link sign-in-link${isActive ? ' active' : ''}`
+            }
+            to="/signin"
+            onClick={closeMenu}
+          >
+            Sign in
+          </NavLink>
+        )}
       </nav>
     </header>
   )

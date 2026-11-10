@@ -1,13 +1,17 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/auth-context.js'
+import { readSettings, saveHistoryEntry } from '../utils/account-storage.js'
 
 const MAX_NOTICE_LENGTH = 5000
 
 function Home() {
+  const navigate = useNavigate()
+  const { user, loading: authLoading } = useAuth()
   const [notice, setNotice] = useState('')
   const [feedback, setFeedback] = useState('')
   const [hasError, setHasError] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [result, setResult] = useState(null)
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -25,7 +29,6 @@ function Home() {
     }
 
     setIsLoading(true)
-    setResult(null)
     setFeedback('')
     setHasError(false)
 
@@ -54,7 +57,26 @@ function Home() {
         throw new Error('The response did not contain a valid explanation')
       }
 
-      setResult(data)
+      let storageWarning = false
+      let historyWarning = false
+      try {
+        window.sessionStorage.setItem('bridgeai-last-result', JSON.stringify(data))
+      } catch {
+        storageWarning = true
+      }
+
+      if (user?.uid && !authLoading) {
+        const { settings, error } = readSettings(user.uid)
+        if (error) {
+          historyWarning = true
+        } else if (settings.saveHistory) {
+          historyWarning = !saveHistoryEntry(user.uid, data)
+        }
+      }
+
+      navigate('/result', {
+        state: { result: data, storageWarning, historyWarning },
+      })
     } catch {
       setFeedback("We couldn't simplify this notice right now. Please try again.")
       setHasError(true)
@@ -67,7 +89,6 @@ function Home() {
     setNotice(event.target.value)
     setFeedback('')
     setHasError(false)
-    setResult(null)
   }
 
   return (
@@ -122,37 +143,6 @@ function Home() {
           </p>
         </form>
       </section>
-
-      {result && (
-        <section className="input-panel mt-6" aria-labelledby="results-heading">
-          <h2 id="results-heading">Your simplified notice</h2>
-          <div className="mt-5 space-y-5">
-            <section>
-              <h3 className="mb-2 font-semibold">Summary</h3>
-              <p className="mb-0 leading-relaxed">{result.summary}</p>
-            </section>
-            <section className="border-t border-[var(--color-border)] pt-5">
-              <h3 className="mb-2 font-semibold">Who it affects</h3>
-              <p className="mb-0 leading-relaxed">{result.whoItAffects}</p>
-            </section>
-            <section className="border-t border-[var(--color-border)] pt-5">
-              <h3 className="mb-2 font-semibold">Deadlines</h3>
-              <p className="mb-0 leading-relaxed">{result.deadlines}</p>
-            </section>
-            <section className="border-t border-[var(--color-border)] pt-5">
-              <h3 className="mb-2 font-semibold">What you should do</h3>
-              <ul className="mb-0 list-disc space-y-2 pl-5">
-                {result.actionSteps.map((step, index) => (
-                  <li key={`${index}-${step}`}>{step}</li>
-                ))}
-              </ul>
-            </section>
-          </div>
-          <aside className="privacy-note" aria-label="Legal advice disclaimer">
-            <p>This is a simplified explanation, not legal advice.</p>
-          </aside>
-        </section>
-      )}
 
       <aside className="privacy-note" aria-label="Privacy and prototype limits">
         <h2>What happens to your text?</h2>

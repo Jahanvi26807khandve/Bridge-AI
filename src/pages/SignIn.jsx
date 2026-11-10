@@ -1,11 +1,18 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/auth-context.js'
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-function GoogleButton({ onClick }) {
+function GoogleButton({ onClick, loading, configured }) {
   return (
-    <button className="google-button" type="button" onClick={onClick}>
+    <button
+      className="google-button"
+      type="button"
+      onClick={onClick}
+      disabled={!configured || loading}
+      aria-busy={loading}
+    >
       <svg aria-hidden="true" viewBox="0 0 48 48" className="google-icon">
         <path
           fill="#4285F4"
@@ -24,7 +31,11 @@ function GoogleButton({ onClick }) {
           d="M24 12c3 0 5.7 1 7.8 3.1l5.8-5.8A19.4 19.4 0 0 0 24 4 20 20 0 0 0 5.8 15.2l6.8 5.3C14.2 15.6 18.7 12 24 12Z"
         />
       </svg>
-      Continue with Google
+      {!configured
+        ? 'Google sign-in is not configured.'
+        : loading
+          ? 'Opening Google…'
+          : 'Continue with Google'}
     </button>
   )
 }
@@ -68,7 +79,12 @@ function Divider() {
   )
 }
 
-function SignInForm() {
+function SignInForm({
+  googleError,
+  googleLoading,
+  googleSignInConfigured,
+  onGoogleSignIn,
+}) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [feedback, setFeedback] = useState('')
@@ -94,12 +110,6 @@ function SignInForm() {
 
     // Real authentication will be added later.
     setFeedback('Sign-in is not connected yet. This is a design preview.')
-    setHasError(false)
-    setInvalidField('')
-  }
-
-  function handleGoogleClick() {
-    setFeedback('Google sign-in is not connected yet. This is a design preview.')
     setHasError(false)
     setInvalidField('')
   }
@@ -157,7 +167,14 @@ function SignInForm() {
         {feedback}
       </p>
       <Divider />
-      <GoogleButton onClick={handleGoogleClick} />
+      <GoogleButton
+        onClick={onGoogleSignIn}
+        loading={googleLoading}
+        configured={googleSignInConfigured}
+      />
+      <p className="auth-feedback auth-feedback-error" role="status" aria-live="polite">
+        {googleError}
+      </p>
     </form>
   )
 }
@@ -219,7 +236,12 @@ function getPasswordStrength(password) {
   return { label: 'Strong', level: 3 }
 }
 
-function CreateAccountForm() {
+function CreateAccountForm({
+  googleError,
+  googleLoading,
+  googleSignInConfigured,
+  onGoogleSignIn,
+}) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -267,12 +289,6 @@ function CreateAccountForm() {
       setFeedback(error.message)
       setHasError(true)
     }
-  }
-
-  function handleGoogleClick() {
-    setFeedback('Google sign-in is not connected yet. This is a design preview.')
-    setHasError(false)
-    setInvalidField('')
   }
 
   return (
@@ -362,13 +378,54 @@ function CreateAccountForm() {
         {feedback}
       </p>
       <Divider />
-      <GoogleButton onClick={handleGoogleClick} />
+      <GoogleButton
+        onClick={onGoogleSignIn}
+        loading={googleLoading}
+        configured={googleSignInConfigured}
+      />
+      <p className="auth-feedback auth-feedback-error" role="status" aria-live="polite">
+        {googleError}
+      </p>
     </form>
   )
 }
 
 function SignIn() {
   const [activeTab, setActiveTab] = useState('signin')
+  const [googleLoading, setGoogleLoading] = useState(false)
+  const [googleError, setGoogleError] = useState('')
+  const { signInWithGoogle, isFirebaseConfigured } = useAuth()
+  const navigate = useNavigate()
+
+  async function handleGoogleSignIn() {
+    setGoogleError('')
+    setGoogleLoading(true)
+
+    try {
+      await signInWithGoogle()
+      navigate('/')
+    } catch (error) {
+      if (error?.code === 'auth/popup-closed-by-user') {
+        return
+      }
+
+      if (!isFirebaseConfigured) {
+        setGoogleError('Google sign-in is not configured.')
+      } else if (error?.code === 'auth/popup-blocked') {
+        setGoogleError(
+          'Your browser blocked the Google sign-in popup. Allow popups and try again.',
+        )
+      } else if (error?.code === 'auth/network-request-failed') {
+        setGoogleError(
+          'A network issue prevented sign-in. Check your connection and try again.',
+        )
+      } else {
+        setGoogleError('We couldn’t sign you in with Google. Please try again.')
+      }
+    } finally {
+      setGoogleLoading(false)
+    }
+  }
 
   function handleTabKeyDown(event) {
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
@@ -419,7 +476,21 @@ function SignIn() {
           role="tabpanel"
           aria-labelledby={`${activeTab}-tab`}
         >
-          {activeTab === 'signin' ? <SignInForm /> : <CreateAccountForm />}
+          {activeTab === 'signin' ? (
+            <SignInForm
+              googleError={googleError}
+              googleLoading={googleLoading}
+              googleSignInConfigured={isFirebaseConfigured}
+              onGoogleSignIn={handleGoogleSignIn}
+            />
+          ) : (
+            <CreateAccountForm
+              googleError={googleError}
+              googleLoading={googleLoading}
+              googleSignInConfigured={isFirebaseConfigured}
+              onGoogleSignIn={handleGoogleSignIn}
+            />
+          )}
         </div>
       </section>
     </main>
