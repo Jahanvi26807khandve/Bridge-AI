@@ -281,7 +281,7 @@ function AccountContent({ user, signOut }) {
               <span>Save my history on this device</span>
             </label>
             <p className="account-setting-note">
-              Language and reading level will be applied to results soon.
+              Applied to your next result.
             </p>
           </div>
         )}

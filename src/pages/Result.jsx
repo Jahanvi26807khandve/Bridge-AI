@@ -14,6 +14,12 @@ function isValidResult(value) {
   )
 }
 
+const speechLanguages = {
+  english: { locale: 'en-IN', name: 'English' },
+  hindi: { locale: 'hi-IN', name: 'Hindi' },
+  marathi: { locale: 'mr-IN', name: 'Marathi' },
+}
+
 function getSavedResult() {
   try {
     const savedResult = window.sessionStorage.getItem(STORAGE_KEY)
@@ -129,7 +135,18 @@ function Result() {
       return
     }
 
+    const language = speechLanguages[result.language] ?? speechLanguages.english
+    const voice = window.speechSynthesis
+      .getVoices()
+      .find((availableVoice) => availableVoice.lang.toLowerCase() === language.locale.toLowerCase())
+    if (!voice) {
+      setFeedback(`No ${language.name} voice is available on this device.`)
+      return
+    }
+
     const utterance = new window.SpeechSynthesisUtterance(plainText)
+    utterance.lang = language.locale
+    utterance.voice = voice
     speechUtterance.current = utterance
     utterance.onend = () => {
       if (speechUtterance.current !== utterance) return

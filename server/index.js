@@ -18,6 +18,22 @@ const defaultModel = 'gemini-3.8-flash'
 const geminiTimeoutMs = 30_000
 const geminiRetryDelayMs = 2_000
 const busyErrorMessage = 'The service is busy. Please try again in a minute.'
+const supportedLanguages = ['english', 'hindi', 'marathi']
+const supportedLevels = ['simple', 'detailed']
+const resultInstructions = {
+  english: {
+    simple: 'Write the values of summary, whoItAffects, deadlines, and actionSteps in English. Keep the JSON keys exactly in English. Keep dates, times, amounts, names, and numbers exactly as written in the notice. Simple means very short sentences.',
+    detailed: 'Write the values of summary, whoItAffects, deadlines, and actionSteps in English. Keep the JSON keys exactly in English. Keep dates, times, amounts, names, and numbers exactly as written in the notice. Detailed means up to 5 sentences in the summary and short explanations of any difficult term.',
+  },
+  hindi: {
+    simple: 'Write the values of summary, whoItAffects, deadlines, and actionSteps in Hindi using Devanagari script. Keep the JSON keys exactly in English. Keep dates, times, amounts, names, and numbers exactly as written in the notice. Simple means very short sentences.',
+    detailed: 'Write the values of summary, whoItAffects, deadlines, and actionSteps in Hindi using Devanagari script. Keep the JSON keys exactly in English. Keep dates, times, amounts, names, and numbers exactly as written in the notice. Detailed means up to 5 sentences in the summary and short explanations of any difficult term.',
+  },
+  marathi: {
+    simple: 'Write the values of summary, whoItAffects, deadlines, and actionSteps in Marathi using Devanagari script. Keep the JSON keys exactly in English. Keep dates, times, amounts, names, and numbers exactly as written in the notice. Simple means very short sentences.',
+    detailed: 'Write the values of summary, whoItAffects, deadlines, and actionSteps in Marathi using Devanagari script. Keep the JSON keys exactly in English. Keep dates, times, amounts, names, and numbers exactly as written in the notice. Detailed means up to 5 sentences in the summary and short explanations of any difficult term.',
+  },
+}
 
 app.use(express.json())
 
@@ -55,7 +71,11 @@ function logGeminiError(error) {
 }
 
 app.post('/api/simplify', async (request, response) => {
-  const { text } = request.body ?? {}
+  const { text, language = 'english', level = 'simple' } = request.body ?? {}
+
+  if (!supportedLanguages.includes(language) || !supportedLevels.includes(level)) {
+    return response.status(400).json({ error: 'Unsupported language or reading level.' })
+  }
 
   if (typeof text !== 'string' || text.trim().length === 0) {
     return response.status(400).json({ error: 'Text must not be empty.' })
@@ -77,10 +97,10 @@ app.post('/api/simplify', async (request, response) => {
     })
     const generateContent = () => ai.models.generateContent({
       model: process.env.GEMINI_MODEL || defaultModel,
-      contents: `Return JSON only with these fields: summary, whoItAffects, deadlines, and actionSteps. Do not include markdown. Simplify this text:\n\n${text}`,
+      contents: text,
       config: {
         temperature: 0.2,
-        systemInstruction: SYSTEM_PROMPT,
+        systemInstruction: `${SYSTEM_PROMPT}\n\n${resultInstructions[language][level]}`,
         responseMimeType: 'application/json',
         responseSchema: {
           type: 'OBJECT',

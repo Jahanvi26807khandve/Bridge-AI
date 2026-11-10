@@ -1,7 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/auth-context.js'
-import { readSettings, saveHistoryEntry } from '../utils/account-storage.js'
+import {
+  createHistoryEntry,
+  readHistory,
+  readSettings,
+  writeHistory,
+} from '../utils/account-storage.js'
 
 const MAX_NOTICE_LENGTH = 5000
 
@@ -32,13 +37,17 @@ function Home() {
     setFeedback('')
     setHasError(false)
 
+    const savedSettings = user?.uid && !authLoading ? readSettings(user.uid) : null
+    const language = savedSettings?.settings.language.toLowerCase() ?? 'english'
+    const level = savedSettings?.settings.readingLevel.toLowerCase() ?? 'simple'
+
     try {
       const response = await fetch('/api/simplify', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ text: notice }),
+        body: JSON.stringify({ text: notice, language, level }),
       })
 
       if (!response.ok) {
@@ -57,25 +66,29 @@ function Home() {
         throw new Error('The response did not contain a valid explanation')
       }
 
+      const result = { ...data, language }
       let storageWarning = false
       let historyWarning = false
       try {
-        window.sessionStorage.setItem('bridgeai-last-result', JSON.stringify(data))
+        window.sessionStorage.setItem('bridgeai-last-result', JSON.stringify(result))
       } catch {
         storageWarning = true
       }
 
-      if (user?.uid && !authLoading) {
-        const { settings, error } = readSettings(user.uid)
-        if (error) {
+      if (savedSettings) {
+        if (savedSettings.error) {
           historyWarning = true
-        } else if (settings.saveHistory) {
-          historyWarning = !saveHistoryEntry(user.uid, data)
+        } else if (savedSettings.settings.saveHistory) {
+          const { history, error } = readHistory(user.uid)
+          historyWarning = error || !writeHistory(
+            user.uid,
+            [createHistoryEntry(result), ...history].slice(0, 20),
+          )
         }
       }
 
       navigate('/result', {
-        state: { result: data, storageWarning, historyWarning },
+        state: { result, storageWarning, historyWarning },
       })
     } catch {
       setFeedback("We couldn't simplify this notice right now. Please try again.")
