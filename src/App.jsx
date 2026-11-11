@@ -14,7 +14,7 @@ function App() {
 
   return (
     <div className={`page-shell min-h-screen${isAuthPage ? ' auth-shell' : ''}`}>
-      {!isAuthPage && <Header />}
+      <Header />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/result" element={<Result />} />

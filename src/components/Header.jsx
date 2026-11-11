@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../context/auth-context.js'
+import { useTheme } from '../context/use-theme.js'
 
 const links = [
   { label: 'Home', to: '/' },
@@ -12,6 +13,7 @@ function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [signOutError, setSignOutError] = useState('')
   const { user, loading, signOut } = useAuth()
+  const { theme, toggleTheme } = useTheme()
 
   function closeMenu() {
     setIsMenuOpen(false)
@@ -31,18 +33,36 @@ function Header() {
       <NavLink className="wordmark" to="/" aria-label="BridgeAI home" onClick={closeMenu}>
         BridgeAI
       </NavLink>
-      <button
-        className="menu-toggle"
-        type="button"
-        aria-expanded={isMenuOpen}
-        aria-controls="primary-navigation"
-        aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
-        onClick={() => setIsMenuOpen((open) => !open)}
-      >
-        <span />
-        <span />
-        <span />
-      </button>
+      <div className="header-actions">
+        <button
+          className="theme-toggle"
+          type="button"
+          aria-label="Dark mode"
+          aria-pressed={theme === 'dark'}
+          onClick={toggleTheme}
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            {theme === 'dark' ? (
+              <circle cx="12" cy="12" r="4" />
+            ) : (
+              <path d="M20.2 15.1A8.4 8.4 0 0 1 8.9 3.8 8.5 8.5 0 1 0 20.2 15.1Z" />
+            )}
+          </svg>
+          <span>Dark mode</span>
+        </button>
+        <button
+          className="menu-toggle"
+          type="button"
+          aria-expanded={isMenuOpen}
+          aria-controls="primary-navigation"
+          aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
+          onClick={() => setIsMenuOpen((open) => !open)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+      </div>
       <nav
         id="primary-navigation"
         className={`primary-navigation${isMenuOpen ? ' is-open' : ''}`}

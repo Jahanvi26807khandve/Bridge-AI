@@ -1,6 +1,9 @@
 import { GoogleGenAI } from '@google/genai'
 import { config as loadEnv } from 'dotenv'
 import express from 'express'
+import { getAuth } from 'firebase-admin/auth'
+import { getApps, initializeApp } from 'firebase-admin/app'
+import { ipKeyGenerator, rateLimit } from 'express-rate-limit'
 import { fileURLToPath } from 'node:url'
 
 import { SYSTEM_PROMPT } from './prompt.js'
@@ -13,6 +16,9 @@ loadEnv({
 })
 
 const app = express()
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1)
+}
 const port = Number(process.env.PORT ?? 3000)
 const defaultModel = 'gemini-3.8-flash'
 const geminiTimeoutMs = 30_000
@@ -35,7 +41,7 @@ const resultInstructions = {
   },
 }
 
-app.use(express.json())
+app.use(express.json({ limit: '20kb' }))
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error('PORT must be an integer between 1 and 65535.')
@@ -43,6 +49,51 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 
 app.get('/api/health', (_request, response) => {
   response.status(200).json({ status: 'ok' })
+})
+
+function getFirebaseAdminAuth() {
+  const projectId = process.env.FIREBASE_PROJECT_ID
+  if (!projectId) {
+    throw new Error('FIREBASE_PROJECT_ID is not configured.')
+  }
+
+  const app = getApps().find(({ name }) => name === '[DEFAULT]') ??
+    initializeApp({ projectId })
+  return getAuth(app)
+}
+
+async function authenticateOptionalUser(request, response, next) {
+  const authorization = request.get('authorization') ?? ''
+  const token = /^Bearer\s+(.+)$/i.exec(authorization)?.[1]?.trim()
+
+  if (!token) {
+    return next()
+  }
+
+  try {
+    const decodedToken = await getFirebaseAdminAuth().verifyIdToken(token)
+    request.auth = { uid: decodedToken.uid }
+    return next()
+  } catch (error) {
+    if (['auth/argument-error', 'auth/invalid-id-token', 'auth/id-token-expired'].includes(error?.code)) {
+      return response.status(401).json({ error: 'Please sign in again.' })
+    }
+
+    return response.status(503).json({ error: 'Unable to verify your sign-in right now.' })
+  }
+}
+
+const simplifyRateLimit = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: (request) => request.auth ? 20 : 5,
+  keyGenerator: (request) => request.auth
+    ? `uid:${request.auth.uid}`
+    : `ip:${ipKeyGenerator(request.ip)}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_request, response) => response
+    .status(429)
+    .json({ error: 'Too many requests. Please try again in a few minutes.' }),
 })
 
 function isSimplifyResult(value) {
@@ -70,7 +121,7 @@ function logGeminiError(error) {
   return apiError.status
 }
 
-app.post('/api/simplify', async (request, response) => {
+app.post('/api/simplify', authenticateOptionalUser, simplifyRateLimit, async (request, response) => {
   const { text, language = 'english', level = 'simple' } = request.body ?? {}
 
   if (!supportedLanguages.includes(language) || !supportedLevels.includes(level)) {
