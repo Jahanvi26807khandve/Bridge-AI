@@ -19,7 +19,15 @@ const app = express()
 if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1)
 }
+const host = process.env.HOST ?? '127.0.0.1'
 const port = Number(process.env.PORT ?? 3000)
+const allowedOrigins = (process.env.ALLOWED_ORIGIN ?? '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean)
+const corsOrigins = allowedOrigins.length
+  ? allowedOrigins
+  : ['http://localhost:5173']
 const defaultModel = 'gemini-3.8-flash'
 const geminiTimeoutMs = 30_000
 const geminiRetryDelayMs = 2_000
@@ -40,6 +48,22 @@ const resultInstructions = {
     detailed: 'Write the values of summary, whoItAffects, deadlines, and actionSteps in Marathi using Devanagari script. Keep the JSON keys exactly in English. Keep dates, times, amounts, names, and numbers exactly as written in the notice. Detailed means up to 5 sentences in the summary and short explanations of any difficult term.',
   },
 }
+
+app.use((request, response, next) => {
+  const origin = request.get('Origin')
+  if (origin && corsOrigins.includes(origin)) {
+    response.setHeader('Access-Control-Allow-Origin', origin)
+    response.setHeader('Vary', 'Origin')
+    if (request.method === 'OPTIONS') {
+      response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+      response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+      return response.sendStatus(204)
+    }
+  } else if (request.method === 'OPTIONS') {
+    return response.sendStatus(origin ? 403 : 204)
+  }
+  return next()
+})
 
 app.use(express.json({ limit: '20kb' }))
 
@@ -214,6 +238,6 @@ if (!process.env.FIREBASE_PROJECT_ID) {
   console.warn('FIREBASE_PROJECT_ID is missing.')
 }
 
-app.listen(port, '127.0.0.1', () => {
-  console.log(`BridgeAI API listening at http://127.0.0.1:${port}`)
+app.listen(port, host, () => {
+  console.log(`BridgeAI API listening at http://${host}:${port}`)
 })

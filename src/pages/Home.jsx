@@ -9,6 +9,7 @@ import {
 } from '../utils/account-storage.js'
 
 const MAX_NOTICE_LENGTH = 5000
+const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '')
 const examples = [
   {
     label: 'Water shutdown',
@@ -57,7 +58,7 @@ function Home() {
     const level = savedSettings?.settings.readingLevel.toLowerCase() ?? 'simple'
 
     try {
-      const sendRequest = (token) => fetch('/api/simplify', {
+      const sendRequest = (token) => fetch(`${API_BASE_URL}/api/simplify`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
