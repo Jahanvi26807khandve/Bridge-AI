@@ -1,7 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import { ThemeContext } from './theme-context.js'
+import { useAuth } from './auth-context.js'
+import { readSettings } from '../utils/account-storage.js'
 
 const STORAGE_KEY = 'bridgeai-theme'
+
+function getSavedPreference() {
+  try {
+    const savedPreference = window.localStorage.getItem(STORAGE_KEY)
+    if (['system', 'light', 'dark'].includes(savedPreference)) {
+      return savedPreference[0].toUpperCase() + savedPreference.slice(1)
+    }
+  } catch {
+    return 'System'
+  }
+  return 'System'
+}
 
 function getSystemTheme() {
   return window.matchMedia?.('(prefers-color-scheme: dark)')?.matches
@@ -9,19 +23,23 @@ function getSystemTheme() {
     : 'light'
 }
 
-function getSavedTheme() {
+function saveDevicePreference(preference) {
   try {
-    const savedTheme = window.localStorage.getItem(STORAGE_KEY)
-    return savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : null
+    window.localStorage.setItem(STORAGE_KEY, preference.toLowerCase())
   } catch {
-    return null
+    return false
   }
+  return true
 }
 
-export function ThemeProvider({ children }) {
+function ThemePreferenceProvider({ children, user, loading }) {
   const [systemTheme, setSystemTheme] = useState(getSystemTheme)
-  const [preference, setPreference] = useState(getSavedTheme)
-  const theme = preference ?? systemTheme
+  const [preference, setPreference] = useState(() =>
+    !loading && user
+      ? readSettings(user.uid).settings.theme
+      : getSavedPreference(),
+  )
+  const theme = preference === 'System' ? systemTheme : preference.toLowerCase()
 
   useEffect(() => {
     const mediaQuery = window.matchMedia?.('(prefers-color-scheme: dark)')
@@ -34,23 +52,33 @@ export function ThemeProvider({ children }) {
     return () => mediaQuery.removeEventListener('change', updateSystemTheme)
   }, [])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme
-  }, [theme])
+    saveDevicePreference(preference)
+  }, [preference, theme])
 
-  function toggleTheme() {
-    const nextPreference = theme === 'dark' ? 'light' : 'dark'
-    setPreference(nextPreference)
-    try {
-      window.localStorage.setItem(STORAGE_KEY, nextPreference)
-    } catch {
-      // The selected theme remains active for this page even when storage is unavailable.
+  function setThemePreference(nextPreference) {
+    if (!['System', 'Light', 'Dark'].includes(nextPreference)) {
+      throw new Error('Theme preference must be System, Light, or Dark.')
     }
+
+    setPreference(nextPreference)
   }
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, preference, setThemePreference }}>
       {children}
     </ThemeContext.Provider>
+  )
+}
+
+export function ThemeProvider({ children }) {
+  const { user, loading } = useAuth()
+  const providerKey = loading ? 'loading' : user?.uid ?? 'signed-out'
+
+  return (
+    <ThemePreferenceProvider key={providerKey} user={user} loading={loading}>
+      {children}
+    </ThemePreferenceProvider>
   )
 }

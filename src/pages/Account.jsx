@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/auth-context.js'
+import { useTheme } from '../context/use-theme.js'
 import {
   readHistory,
   readSettings,
@@ -35,6 +36,7 @@ function Account() {
 
 function AccountContent({ user, signOut }) {
   const navigate = useNavigate()
+  const { setThemePreference } = useTheme()
   const [initialData] = useState(() => {
     const savedSettings = readSettings(user.uid)
     const savedHistory = readHistory(user.uid)
@@ -68,6 +70,9 @@ function AccountContent({ user, signOut }) {
 
   function updateSettings(nextSettings) {
     setSettings(nextSettings)
+    if (nextSettings.theme !== settings.theme) {
+      setThemePreference(nextSettings.theme)
+    }
     setFeedback(
       writeSettings(user.uid, nextSettings)
         ? 'Saved'
@@ -270,6 +275,20 @@ function AccountContent({ user, signOut }) {
                 <option>Detailed</option>
               </select>
             </div>
+            <div className="account-setting-field">
+              <label htmlFor="account-theme">Theme</label>
+              <select
+                id="account-theme"
+                value={settings.theme}
+                onChange={(event) =>
+                  updateSettings({ ...settings, theme: event.target.value })
+                }
+              >
+                <option>System</option>
+                <option>Light</option>
+                <option>Dark</option>
+              </select>
+            </div>
             <label className="history-toggle">
               <input
                 type="checkbox"
@@ -281,7 +300,7 @@ function AccountContent({ user, signOut }) {
               <span>Save my history on this device</span>
             </label>
             <p className="account-setting-note">
-              Applied to your next result.
+              Theme changes apply immediately. Other settings apply to your next result.
             </p>
           </div>
         )}

@@ -2,6 +2,7 @@ const DEFAULT_SETTINGS = {
   language: 'English',
   readingLevel: 'Simple',
   saveHistory: true,
+  theme: 'System',
 }
 
 function settingsKey(uid) {
@@ -41,6 +42,9 @@ export function readSettings(uid) {
           typeof parsed.saveHistory === 'boolean'
             ? parsed.saveHistory
             : DEFAULT_SETTINGS.saveHistory,
+        theme: ['System', 'Light', 'Dark'].includes(parsed.theme)
+          ? parsed.theme
+          : DEFAULT_SETTINGS.theme,
       },
       error: false,
     }

@@ -100,7 +100,7 @@ a {
   width: 100%;
   min-height: 76px;
   margin: 0;
-  padding-inline: max(24px, calc((100% - 1120px) / 2));
+  padding-inline: 24px;
   background: var(--color-obsidian);
 }
 
@@ -114,42 +114,6 @@ a {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  border: 1px solid rgb(241 233 218 / 62%);
-  border-radius: 4px;
-  padding: 8px 11px;
-  color: var(--color-header-text);
-  background: transparent;
-  font: inherit;
-  font-size: 0.88rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.theme-toggle:hover {
-  border-color: var(--color-header-text);
-  background: rgb(255 255 255 / 14%);
-}
-
-.theme-toggle:focus-visible {
-  outline: 3px solid var(--color-header-text);
-  outline-offset: 3px;
-}
-
-.theme-toggle svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
 }
 
 .nav-link {
@@ -262,7 +226,7 @@ a {
 
 .wordmark {
   color: var(--color-header-text);
-  font-size: 1.25rem;
+  font-size: 1.85rem;
   font-weight: 720;
   letter-spacing: -0.04em;
   text-decoration: none;
@@ -1371,7 +1335,7 @@ textarea[aria-invalid="true"] {
     position: relative;
     flex-wrap: wrap;
     min-height: 64px;
-    padding-inline: 16px;
+    padding-inline: 24px;
   }
 
   .menu-toggle {
@@ -1381,11 +1345,6 @@ textarea[aria-invalid="true"] {
     padding: 10px 4px 10px 10px;
     background: transparent;
     cursor: pointer;
-  }
-
-  .theme-toggle {
-    min-height: 40px;
-    padding: 7px 9px;
   }
 
   .menu-toggle span {
@@ -1411,6 +1370,10 @@ textarea[aria-invalid="true"] {
 
   .nav-link {
     padding: 11px 8px;
+  }
+
+  .wordmark {
+    font-size: 1.55rem;
   }
 
   .sign-in-link {

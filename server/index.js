@@ -75,6 +75,10 @@ async function authenticateOptionalUser(request, response, next) {
     request.auth = { uid: decodedToken.uid }
     return next()
   } catch (error) {
+    console.warn('Firebase token verification failed:', {
+      code: error?.code,
+      message: error?.message,
+    })
     if (['auth/argument-error', 'auth/invalid-id-token', 'auth/id-token-expired'].includes(error?.code)) {
       return response.status(401).json({ error: 'Please sign in again.' })
     }
@@ -201,6 +205,14 @@ app.post('/api/simplify', authenticateOptionalUser, simplifyRateLimit, async (re
 
   return response.status(200).json(simplified)
 })
+
+if (!process.env.GEMINI_API_KEY) {
+  console.warn('GEMINI_API_KEY is missing.')
+}
+
+if (!process.env.FIREBASE_PROJECT_ID) {
+  console.warn('FIREBASE_PROJECT_ID is missing.')
+}
 
 app.listen(port, '127.0.0.1', () => {
   console.log(`BridgeAI API listening at http://127.0.0.1:${port}`)
